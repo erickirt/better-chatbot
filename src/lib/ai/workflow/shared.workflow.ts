@@ -219,25 +219,64 @@ export function convertTiptapJsonToText({
           : String(mentionItem);
       return value;
     });
-  return (
-    json.content
-      ?.flatMap((p) => p.content)
-      .filter(Boolean)
-      .reduce((prev, part) => {
-        let data = "";
-        if (!part) return prev;
-        if (part.type === "text") {
-          data += ` ${part.text}`;
-        } else if (part.type === "mention") {
-          data += parser(part);
-        } else if (part.type === "hardBreak") {
-          data += "\n\n";
+  // Recursively process TipTap JSON content
+  const processContent = (content: any[]): string => {
+    return content
+      .flatMap((item) => {
+        if (!item) return "";
+
+        // Handle paragraph
+        if (item.type === "paragraph") {
+          if (!item.content) return "";
+          return processContent(item.content);
         }
 
-        return prev + data;
-      }, "")
-      .trim() || ""
-  );
+        // Handle text
+        if (item.type === "text") {
+          return item.text || "";
+        }
+
+        // Handle mention
+        if (item.type === "mention") {
+          return parser(item);
+        }
+
+        // Handle hard break
+        if (item.type === "hardBreak") {
+          return "\n\n";
+        }
+
+        // Handle bullet list
+        if (item.type === "bulletList") {
+          if (!item.content) return "";
+          return (
+            item.content
+              .map((listItem: any) => {
+                const itemContent = processContent(listItem.content || []);
+                return `• ${itemContent.trim()}`;
+              })
+              .join("\n") + "\n"
+          );
+        }
+
+        // Handle list item
+        if (item.type === "listItem") {
+          if (!item.content) return "";
+          return processContent(item.content);
+        }
+
+        // Recursively process other elements with content
+        if (item.content) {
+          return processContent(item.content);
+        }
+
+        return "";
+      })
+      .join("")
+      .trim();
+  };
+
+  return processContent(json.content || []) || "";
 }
 
 export function convertTiptapJsonToAiMessage({
